@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>熱管需求計算</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;700&family=Noto+Sans+TC:wght@400;700&display=swap');
+        
+        :root {
+            --industry-orange: #f59e0b;
+            --industry-dark: #1e293b;
+        }
+
+        body {
+            font-family: 'Roboto Mono', 'Noto Sans TC', monospace;
+            background-color: #0f172a;
+            color: #f1f5f9;
+        }
+
+        .industrial-card {
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-left: 4px solid var(--industry-orange);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.4);
+        }
+
+        .input-field {
+            background: #0f172a;
+            border: 1px solid #475569;
+            color: #f59e0b;
+            font-weight: bold;
+        }
+
+        .input-field:focus {
+            border-color: #f59e0b;
+            ring: 2px solid rgba(245, 158, 11, 0.3);
+            outline: none;
+        }
+
+        .btn-orange {
+            background-color: #f59e0b;
+            color: #000;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-weight: 800;
+        }
+
+        .btn-orange:hover {
+            background-color: #fbbf24;
+            transform: translateY(-1px);
+        }
+
+        .status-header {
+            background: linear-gradient(90deg, #f59e0b 0%, #d97706 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            padding-right: 0.2em; /* 防止斜體或字距造成的截斷 */
+        }
+
+        input::-webkit-outer-spin-button,
+        input::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+
+        .parameter-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 1rem;
+        }
+
+        .orange-box {
+            border: 1px solid rgba(245, 158, 11, 0.4);
+            background: rgba(15, 23, 42, 0.5);
+            transition: all 0.3s ease;
+        }
+
+        .orange-box:hover {
+            border-color: rgba(245, 158, 11, 1);
+            background: rgba(15, 23, 42, 0.8);
+        }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+    <div class="max-w-6xl mx-auto">
+        <!-- Header -->
+        <header class="mb-10 border-b border-slate-700 pb-6 flex flex-col md:flex-row justify-between items-end">
+            <div>
+                <h1 class="text-4xl font-black status-header mb-1 uppercase italic tracking-tight">HeatPipe Analysis v2.9</h1>
+                <p class="text-[10px] text-slate-500 font-mono tracking-widest uppercase opacity-80">Created by Randy Chen</p>
+            </div>
+            <div class="text-xs text-slate-500 font-mono mt-4 md:mt-0">
+                SYSTEM_STATUS: <span class="text-emerald-500">OPERATIONAL</span> | AUTO_CALC: <span class="text-blue-500">ENABLED</span>
+            </div>
+        </header>
+
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            <!-- Input Section -->
+            <div class="lg:col-span-4 space-y-6">
+                <div class="industrial-card p-6">
+                    <h2 class="text-lg font-bold mb-6 flex items-center text-orange-400 uppercase tracking-widest">
+                        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"></path></svg>
+                        參數輸入 / Parameters
+                    </h2>
+                    
+                    <div class="space-y-4">
+                        <div class="parameter-grid">
+                            <div>
+                                <label class="block text-[10px] font-bold text-slate-500 mb-1 uppercase">功率 (W)</label>
+                                <input type="number" id="power" value="65" oninput="calculate()" class="input-field w-full p-2 rounded text-lg">
+                            </div>
+                            <div>
+                                <label class="block text-[10px] font-bold text-slate-500 mb-1 uppercase">距離 L (mm)</label>
+                                <input type="number" id="length" value="150" oninput="calculate()" class="input-field w-full p-2 rounded text-lg">
+                            </div>
+                        </div>
+
+                        <!-- 溫度相關參數 -->
+                        <div class="parameter-grid">
+                            <div>
+                                <label class="block text-[10px] font-bold text-blue-400 mb-1 uppercase">發熱源 Tcase (°C)</label>
+                                <input type="number" id="temp" value="75" oninput="syncDeltaT(); calculate();" class="input-field w-full p-2 rounded text-lg">
+                            </div>
+                            <div>
+                                <label class="block text-[10px] font-bold text-blue-400 mb-1 uppercase">Heat sink進風環境溫度 Ta (°C)</label>
+                                <input type="number" id="tempAmbient" value="35" oninput="syncDeltaT(); calculate();" class="input-field w-full p-2 rounded text-lg">
+                            </div>
+                        </div>
+
+                        <div class="parameter-grid">
+                            <div class="col-span-2">
+                                <label class="block text-[10px] font-bold text-orange-400 mb-1 uppercase">設計溫差 ΔT (Tc - Ta) (°C)</label>
+                                <div class="relative">
+                                    <input type="number" id="deltaT" value="40" oninput="calculate()" class="input-field w-full p-2 rounded text-lg border-orange-500/50">
+                                    <span class="absolute right-8 top-2 text-[10px] text-slate-500 font-bold">AUTO</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <hr class="border-slate-700 my-2">
+                        
+                        <div class="parameter-grid">
+                            <div>
+                                <label class="block text-[10px] font-bold text-emerald-500 mb-1 uppercase">熱管打扁後厚度 (mm)</label>
+                                <input type="number" id="flatThickness" value="3.0" step="0.1" oninput="calculate()" class="input-field w-full p-2 rounded text-lg">
+                            </div>
+                            <div>
+                                <label class="block text-[10px] font-bold text-orange-500 mb-1 uppercase">熱管安裝方向</label>
+                                <select id="orientation" onchange="calculate()" class="input-field w-full p-2 rounded font-bold text-sm h-[46px]">
+                                    <option value="1.0">水平 0°</option>
+                                    <option value="1.2">熱源在下</option>
+                                    <option value="0.5">熱源在上</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="parameter-grid">
+                            <div>
+                                <label class="block text-[10px] font-bold text-orange-500 mb-1 uppercase">熱管轉角角度 (Deg)</label>
+                                <select id="bendAngle" onchange="calculate()" class="input-field w-full p-2 rounded font-bold text-sm">
+                                    <option value="1.0">無轉角</option>
+                                    <option value="0.95">30° 彎折</option>
+                                    <option value="0.90">45° 彎折</option>
+                                    <option value="0.85">90° 彎折</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-[10px] font-bold text-orange-500 mb-1 uppercase">熱管轉角次數 (N)</label>
+                                <input type="number" id="bendCount" value="0" min="0" max="10" oninput="calculate()" class="input-field w-full p-2 rounded text-lg">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mt-6 text-[10px] text-slate-500 text-center font-mono">
+                        REAL-TIME SIMULATION ACTIVE
+                    </div>
+                </div>
+            </div>
+
+            <!-- Analysis Results Section -->
+            <div class="lg:col-span-8 space-y-6">
+                <!-- Result Grid -->
+                <div class="grid grid-cols-1 gap-6">
+                    <div class="industrial-card p-6 bg-slate-800/50">
+                        <p class="text-xs text-slate-400 font-bold uppercase mb-2">Required System Thermal Resistance (Target)</p>
+                        <div class="flex items-baseline">
+                            <h3 class="text-5xl font-black text-orange-500" id="res-thermal-resistance">--</h3>
+                            <span class="ml-2 text-slate-500 font-bold">K/W</span>
+                        </div>
+                        <div id="temp-warning" class="mt-2 text-[10px] text-red-400 font-bold hidden">⚠️ 警告：物理極限超出範圍（Tc 必須大於 Ta）</div>
+                        <div class="mt-4 h-1 w-full bg-slate-700 rounded overflow-hidden">
+                            <div id="bar-resistance" class="h-full bg-orange-500" style="width: 0%"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Technical Report -->
+                <div class="industrial-card p-6">
+                    <h2 class="text-lg font-bold mb-6 text-slate-200 uppercase tracking-widest border-b border-slate-700 pb-2">Technical Analysis Report</h2>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8 border-b border-slate-800 pb-8">
+                        <div class="text-center md:text-left">
+                            <span class="block text-xs font-bold text-slate-500 uppercase">System K-eff</span>
+                            <span class="text-2xl font-bold text-orange-400" id="val-keff">--</span>
+                            <span class="block text-[10px] text-slate-600">W/m·K (參考值)</span>
+                        </div>
+                        <div class="text-center md:text-left">
+                            <span class="block text-xs font-bold text-slate-500 uppercase">Temp. Factor</span>
+                            <span class="text-2xl font-bold text-orange-400" id="val-temp-factor">--</span>
+                            <span class="block text-[10px] text-slate-600">相位變化效率</span>
+                        </div>
+                        <div class="text-center md:text-left">
+                            <span class="block text-xs font-bold text-emerald-500 uppercase">Flat Loss (D6/D8)</span>
+                            <div class="flex items-baseline justify-center md:justify-start">
+                                <span class="text-xl font-bold text-emerald-400" id="val-flat-6mm">--</span>
+                                <span class="mx-1 text-slate-600">/</span>
+                                <span class="text-xl font-bold text-emerald-400" id="val-flat-8mm">--</span>
+                            </div>
+                            <span class="block text-[10px] text-slate-600">Qmax 損耗百分比</span>
+                        </div>
+                        <div class="text-center md:text-left border-l-0 md:border-l border-slate-700 pl-0 md:pl-4">
+                            <span class="block text-xs font-bold text-slate-500 uppercase">Status</span>
+                            <span class="text-xl font-bold" id="status-qmax">WAITING...</span>
+                        </div>
+                    </div>
+
+                    <!-- Quantity Suggestions -->
+                    <div class="space-y-4">
+                        <h3 class="text-xs font-bold text-slate-500 uppercase tracking-tighter">Recommended Deployment (Safety Factor 1.5x)</h3>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div class="flex flex-col p-4 rounded orange-box">
+                                <div class="flex justify-between items-center mb-1">
+                                    <span class="text-slate-400 text-[10px] font-bold uppercase">Standard 6mm HeatPipes</span>
+                                    <span class="text-[9px] bg-slate-700 px-1 text-slate-300">Target: <span id="target-flat-6">3.0</span>mm</span>
+                                </div>
+                                <div class="flex justify-between items-end">
+                                    <span class="text-3xl font-black text-orange-500" id="val-count-6mm">--</span>
+                                    <span class="text-slate-500 text-[10px] mb-1 font-bold">UNITS</span>
+                                </div>
+                            </div>
+                            <div class="flex flex-col p-4 rounded orange-box">
+                                <div class="flex justify-between items-center mb-1">
+                                    <span class="text-orange-500 text-[10px] font-bold uppercase">Industrial 8mm HeatPipes</span>
+                                    <span class="text-[9px] bg-slate-700 px-1 text-slate-300">Target: <span id="target-flat-8">3.0</span>mm</span>
+                                </div>
+                                <div class="flex justify-between items-end">
+                                    <span class="text-3xl font-black text-orange-500" id="val-count-8mm">--</span>
+                                    <span class="text-slate-500 text-[10px] mb-1 font-bold">UNITS</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mt-8 bg-black/30 p-4 rounded-lg border border-slate-800 font-mono text-xs leading-relaxed">
+                        <div class="flex items-center text-orange-500 mb-2 font-bold uppercase">
+                            <svg class="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" clip-rule="evenodd"></path></svg>
+                            Physical Analysis Notes:
+                        </div>
+                        <ul class="list-disc list-inside text-slate-400 space-y-1">
+                            <li>Tcase < 50°C，效率降低 20%。因為內部蒸汽壓不足，熱傳導能力受限。</li>
+                            <li>Tcase = 50°C ~ 100°C，最佳效率區間。這是水熱管運作最穩定的範圍。</li>
+                            <li>Tcase > 100°C，雖然蒸汽壓很高，效能開始趨於平緩甚至下降。</li>
+                            <li>打扁損失：熱管打扁後會縮減蒸汽通道的空間，從而導致傳熱極限（Qmax）衰減。</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="flex justify-end gap-4">
+                    <button onclick="window.print()" class="px-6 py-2 text-xs font-bold text-slate-400 border border-slate-700 rounded hover:bg-slate-800 transition uppercase tracking-widest">Generate Report</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const SPECS = { D6: 60, D8: 90 };
+
+        /**
+         * 自動同步設計溫差 (Tc - Ta)
+         */
+        function syncDeltaT() {
+            const Tc = parseFloat(document.getElementById('temp').value);
+            const Ta = parseFloat(document.getElementById('tempAmbient').value);
+            const deltaTInput = document.getElementById('deltaT');
+            
+            if (!isNaN(Tc) && !isNaN(Ta)) {
+                deltaTInput.value = Tc - Ta;
+            }
+        }
+
+        function calculate() {
+            const P = parseFloat(document.getElementById('power').value);
+            const L = parseFloat(document.getElementById('length').value);
+            const dT = parseFloat(document.getElementById('deltaT').value);
+            const Tc = parseFloat(document.getElementById('temp').value);
+            const Ta = parseFloat(document.getElementById('tempAmbient').value);
+            const t = parseFloat(document.getElementById('flatThickness').value);
+            const orient = parseFloat(document.getElementById('orientation').value);
+            const bendFactor = parseFloat(document.getElementById('bendAngle').value);
+            const bendCount = parseInt(document.getElementById('bendCount').value) || 0;
+            
+            const resResistance = document.getElementById('res-thermal-resistance');
+            const valKeff = document.getElementById('val-keff');
+            const valTempFact = document.getElementById('val-temp-factor');
+            const valFlat6 = document.getElementById('val-flat-6mm');
+            const valFlat8 = document.getElementById('val-flat-8mm');
+            const valCount6mm = document.getElementById('val-count-6mm');
+            const valCount8mm = document.getElementById('val-count-8mm');
+            const statusEl = document.getElementById('status-qmax');
+            const barResistance = document.getElementById('bar-resistance');
+            const tempWarn = document.getElementById('temp-warning');
+            
+            document.getElementById('target-flat-6').innerText = t;
+            document.getElementById('target-flat-8').innerText = t;
+
+            if (isNaN(P) || isNaN(L) || isNaN(dT) || P <= 0) return;
+
+            // 1. 物理溫差校驗 (Tc 必須大於 Ta)
+            if (dT <= 0) {
+                tempWarn.classList.remove('hidden');
+                resResistance.innerText = "N/A";
+                return;
+            } else {
+                tempWarn.classList.add('hidden');
+            }
+
+            // 2. 結溫修正係數 (Temperature Factor)
+            let tempFactor = 1.0;
+            if (Tc < 50) tempFactor = 0.8;
+            else if (Tc > 100) tempFactor = 0.95; 
+            else tempFactor = 1.0;
+
+            // 3. 打扁修正係數 (Flattening Loss)
+            const flatFactor6mm = Math.min(1.0, t / 6.0);
+            const flatFactor8mm = Math.min(1.0, t / 8.0);
+            valFlat6.innerText = `${Math.round((1 - flatFactor6mm) * 100)}%`;
+            valFlat8.innerText = `${Math.round((1 - flatFactor8mm) * 100)}%`;
+
+            // 4. 熱阻計算
+            const R = dT / P;
+            resResistance.innerText = R.toFixed(3);
+            barResistance.style.width = Math.min(100, (1 / (R + 0.1)) * 10) + '%';
+
+            // 5. 傳熱能力衰減計算
+            const totalBendPenalty = Math.pow(bendFactor, bendCount);
+            const lengthCorrection = 200 / L;
+            const safetyFactor = 1.5;
+
+            // Qmax = 基礎能力 * 長度校正 * 方向係數 * 彎折損失 * 結溫修正 * 打扁修正
+            const qmax6mm = SPECS.D6 * lengthCorrection * orient * totalBendPenalty * tempFactor * flatFactor6mm;
+            const qmax8mm = SPECS.D8 * lengthCorrection * orient * totalBendPenalty * tempFactor * flatFactor8mm;
+
+            // 6. 數量計算
+            const count6mm = Math.max(1, Math.ceil(P / (qmax6mm / safetyFactor)));
+            const count8mm = Math.max(1, Math.ceil(P / (qmax8mm / safetyFactor)));
+
+            // 7. 有效導熱率 Keff (以 6mm 截面積為基礎進行 K 值估算)
+            const radius = (6 / 2) / 1000;
+            const area = Math.PI * Math.pow(radius, 2);
+            const keff = (P * (L/1000)) / (area * dT);
+
+            valKeff.innerText = Math.round(keff).toLocaleString();
+            valTempFact.innerText = tempFactor.toFixed(2);
+            valCount6mm.innerText = count6mm;
+            valCount8mm.innerText = count8mm;
+            
+            if (statusEl) {
+                if (t < 2.0 || dT < 5) {
+                    statusEl.innerText = "CAUTION";
+                    statusEl.className = "text-xl font-bold text-orange-500 animate-pulse";
+                } else {
+                    statusEl.innerText = "OPTIMIZED";
+                    statusEl.className = "text-xl font-bold text-emerald-500";
+                }
+            }
+        }
+
+        window.onload = () => {
+            syncDeltaT();
+            calculate();
+        };
+
+        // --- 阻擋滑鼠右鍵選單 ---
+        document.addEventListener('contextmenu', function(e) {
+            e.preventDefault();
+        }, false);
+    </script>
+</body>
+</html>
